@@ -206,7 +206,7 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
         if hasattr(sys, '_MEIPASS'):
             cmd_prefix = [sys.executable, '--mitmdump']
         else:
-            launcher = 'from mitmproxy.tools.dump import mitmdump; mitmdump()'
+            launcher = 'from mitmproxy.tools.main import mitmdump; mitmdump()'
             cmd_prefix = [sys.executable, '-c', launcher]
 
         cmd = cmd_prefix + [
