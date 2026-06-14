@@ -239,6 +239,16 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
             if sys.platform == 'win32':
                 creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | 134217728
 
+            # v2.5.2: 调试日志 — 把子进程 cmd + 输出写到 dice_debug.log
+            # 引擎启动超时时爸截图发我看, 我能精确定位
+            debug_log = os.path.join(os.path.expanduser('~'), 'dice_debug.log')
+            with open(debug_log, 'a', encoding='utf-8') as f:
+                f.write(f'\n=== {time.strftime("%Y-%m-%d %H:%M:%S")} 启动引擎 ===\n')
+                f.write(f'  cmd: {cmd}\n')
+                f.write(f'  _MEIPASS: {getattr(sys, "_MEIPASS", None)}\n')
+                f.write(f'  sys.executable: {sys.executable}\n')
+                f.write(f'  sys._MEIPASS2: {env.get("_MEIPASS2", None)}\n')
+
             self._process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -248,8 +258,15 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 creationflags=creation_flags,
                 env=env
             )
+
+            with open(debug_log, 'a', encoding='utf-8') as f:
+                f.write(f'  pid: {self._process.pid}\n')
         except Exception as e:
             self._error = f'启动mitmdump失败: {e}'
+            try:
+                with open(debug_log, 'a', encoding='utf-8') as f:
+                    f.write(f'  EXCEPTION: {repr(e)}\n')
+            except: pass
             return False
 
         self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
@@ -267,11 +284,18 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
 
     def _read_output(self):
         """读取子进程stdout，解析addon输出的JSON行"""
+        debug_log = os.path.join(os.path.expanduser('~'), 'dice_debug.log')
         try:
             for line in self._process.stdout:
                 line = line.strip()
                 if not line:
                     continue
+
+                # v2.5.2: 所有子进程输出写日志, 帮调试
+                try:
+                    with open(debug_log, 'a', encoding='utf-8') as f:
+                        f.write(f'  [child] {line}\n')
+                except: pass
 
                 if line.startswith('{"type":'):
                     try:
