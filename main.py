@@ -330,30 +330,72 @@ def main():
                 _f.write(f'  argv: {sys.argv}\n')
         except: pass
         try:
+            # v2.5.7: 一层一层 import 诊断, 看哪一步崩
             try:
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write('[step 1] import mitmproxy.tools.main ...\n')
+                    _f.write('[diag] import sys/os OK\n')
             except: pass
-            from mitmproxy.tools.main import mitmdump
+
+            # step 1: import mitmproxy (顶层)
             try:
+                import mitmproxy
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write(f'[step 2] mitmdump={mitmdump!r}, 调用 ...\n')
-            except: pass
+                    _f.write(f'[step 1] import mitmproxy OK, version={getattr(mitmproxy, "__version__", "?")}\n')
+            except BaseException as _e:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 1] FAIL mitmproxy: {type(_e).__name__}: {_e}\n')
+                    import traceback as _tb1; _f.write(_tb1.format_exc())
+                sys.exit(1)
+
+            # step 1.5: import mitmproxy_rs (Rust pyd) — v2.5.6 已抓, 但看是否 OK
+            try:
+                import mitmproxy_rs
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 1.5] import mitmproxy_rs OK, file={mitmproxy_rs.__file__}\n')
+                    # 看 local (win redirector) 子模块能不能 import
+                    try:
+                        from mitmproxy_rs import local
+                        _f.write(f'[step 1.6] import mitmproxy_rs.local OK\n')
+                    except BaseException as _e2:
+                        _f.write(f'[step 1.6] FAIL mitmproxy_rs.local: {type(_e2).__name__}: {_e2}\n')
+            except BaseException as _e:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 1.5] FAIL mitmproxy_rs: {type(_e).__name__}: {_e}\n')
+                    import traceback as _tb15; _f.write(_tb15.format_exc())
+                # 不 exit, 试试 mitmdump() 自己会报什么
+
+            # step 2: import mitmproxy.tools.main
+            try:
+                from mitmproxy.tools.main import mitmdump
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 2] import mitmproxy.tools.main OK, mitmdump={mitmdump!r}\n')
+            except BaseException as _e:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 2] FAIL mitmproxy.tools.main: {type(_e).__name__}: {_e}\n')
+                    import traceback as _tb2; _f.write(_tb2.format_exc())
+                sys.exit(1)
+
+            # step 3: 调 mitmdump()
+            with open(_crash_log, 'a', encoding='utf-8') as _f:
+                _f.write('[step 3] 调用 mitmdump() ...\n')
+                _f.flush()
             mitmdump()
+            with open(_crash_log, 'a', encoding='utf-8') as _f:
+                _f.write('[step 3] mitmdump() 返回 (正常退出)\n')
         except SystemExit as e:
             try:
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write(f'[mitmdump] SystemExit code={e.code}\n')
+                    _f.write(f'[exit] SystemExit code={e.code}\n')
             except: pass
         except BaseException as e:
             import traceback as _tb
             try:
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write(f'[mitmdump] CRASH: {type(e).__name__}: {e}\n')
+                    _f.write(f'[crash] {type(e).__name__}: {e}\n')
                     _f.write(_tb.format_exc())
             except: pass
             try:
-                sys.stderr.write(f'[mitmdump] CRASH: {type(e).__name__}: {e}\n')
+                sys.stderr.write(f'[crash] {type(e).__name__}: {e}\n')
                 _tb.print_exc(file=sys.stderr)
                 sys.stderr.flush()
             except: pass

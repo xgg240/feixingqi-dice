@@ -211,20 +211,33 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
             launcher = 'from mitmproxy.tools.main import mitmdump; mitmdump()'
             cmd_prefix = [sys.executable, '-c', launcher]
 
-        cmd = cmd_prefix + [
-            '--listen-host', '127.0.0.1',
-            '--listen-port', str(self._proxy_port),
-            '--mode', f'local:{self._target_process}',
-            '--ssl-insecure',
-            '--set', 'flow_detail=0',
-            '-s', self._addon_script
-        ]
+        # v2.5.7: 调试模式, 不走 local:xxx, 只跑 mitmdump (port 8899 + addon)
+        # 验 mitmproxy 本身能起来不 (排除 windivert/local redirector 的问题)
+        _use_debug_mode = os.environ.get('DICE_DEBUG_PROXY', '0') == '1'
+        if _use_debug_mode:
+            cmd = cmd_prefix + [
+                '--listen-host', '127.0.0.1',
+                '--listen-port', '8080',
+                '--ssl-insecure',
+                '--set', 'flow_detail=0',
+                '-s', self._addon_script,
+            ]
+            print(f'[ProxyEngine] 调试模式 (无 local:xxx): {cmd}')
+        else:
+            cmd = cmd_prefix + [
+                '--listen-host', '127.0.0.1',
+                '--listen-port', str(self._proxy_port),
+                '--mode', f'local:{self._target_process}',
+                '--ssl-insecure',
+                '--set', 'flow_detail=0',
+                '-s', self._addon_script
+            ]
 
-        if self._target_process == 'WeChatAppEx.exe':
-            cmd.insert(-2, '--set')
-            cmd.insert(-2, 'allow_hosts=dbankcloud\\.cn|wxagame|weixin\\.qq\\.com')
+            if self._target_process == 'WeChatAppEx.exe':
+                cmd.insert(-2, '--set')
+                cmd.insert(-2, 'allow_hosts=dbankcloud\\.cn|wxagame|weixin\\.qq\\.com')
 
-        print(f'[ProxyEngine] 启动: {sys.executable} -c ... local:{self._target_process}')
+            print(f'[ProxyEngine] 启动: {sys.executable} -c ... local:{self._target_process}')
 
         try:
             env = os.environ.copy()
@@ -255,8 +268,9 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 f.write(f'  sys.executable: {sys.executable}\n')
                 f.write(f'  sys._MEIPASS2: {env.get("_MEIPASS2", None)}\n')
 
-            # 开文件接受子进程 stdout (不用 PIPE, 避免 C 层 buffer)
-            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=1)  # line buffered
+            # v2.5.7: 用 bufsize=0 (unbuffered), 原始 fd, 子进程 C 层 stdout 也能立刻看到
+            # line-buffered 在 PyInstaller bootloader 下 C 子进程继承不到 Python buffer
+            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=0)
 
             self._process = subprocess.Popen(
                 cmd,
