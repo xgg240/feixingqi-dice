@@ -46,18 +46,48 @@ jobs:
       - name: List output
         run: |
           Get-ChildItem dist/
-          Get-Item dist\DiceTool.exe | Select-Object Name, Length
+          Get-ChildItem dist\DiceTool\
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: DiceTool-windows
-          path: dist/DiceTool.exe
+          path: dist/DiceTool/
           if-no-files-found: error
 
       - name: Create Release (tag push only)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/DiceTool.exe
+          files: |
+            dist/DiceTool/DiceTool.exe
+            dist/DiceTool/_internal/windivert.dll
           generate_release_notes: true
+          body: |
+            ## 飞机棋 yz 工具 v2.5.0 — 编译输出 (onedir 模式)
+
+            **重要**: 本版本为 **onedir 模式** (生成 `DiceTool/` 目录), 不是单文件。
+
+            ### 使用方法
+            1. 下 zip 压缩包 (Releases 页) 或 下载 Action Artifacts (`DiceTool-windows`)
+            2. 解压到任意目录 (例 `C:\Tools\DiceTool\`)
+            3. 右键 `DiceTool.exe` → **以管理员身份运行** (UAC 必跳)
+
+            ### 目录结构
+            ```
+            DiceTool/
+            ├── DiceTool.exe              # 入口 (需要管理员权限)
+            └── _internal/                # PyInstaller 解压出的依赖
+                ├── windivert.dll         # WinDivert 驱动 (mitmproxy 11.x 自带)
+                ├── mitmproxy/            # mitmproxy 11.0.0 完整 (321 个文件)
+                ├── ...
+            ```
+
+            ### 修复史
+            - v2.4.0~v2.4.9: 解决 mitmproxy 8.0.0 → 11.0.0 依赖冲突 + import 路径
+            - **v2.5.0: spec 改 --onedir 模式**, 解决单文件 + 子进程 import 链断裂问题
+
+            ### 体积
+            - 压缩后 zip: ~15 MB
+            - 解压后目录: ~80 MB (mitmproxy + tkinter + windivert)
+            - 启动: 1-2 秒
