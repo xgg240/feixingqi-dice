@@ -83,15 +83,15 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# v2.5.0: 改用 --onedir 模式 (生成 DiceTool/ 目录)
+# 单文件模式 + 子进程 [exe --mitmdump] 在 PyInstaller 6.21 + mitmproxy 11.x 下会 import 不出来
+# onedir 模式下子进程的 _MEIPASS=DiceTool/_internal/ 业务 modules 都能被 bootloader 加载
 # ⚠️ 关键: uac_admin=True → 启动自动弹 UAC 提权
-# main.py 里的 run_as_admin() 必须跟这个配套, 少一个 exe 启动就因为权限不够直接挂
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,   # ← onedir 模式: binaries 走 COLLECT
     name='DiceTool',
     debug=False,
     bootloader_ignore_signals=False,
@@ -106,4 +106,16 @@ exe = EXE(
     entitlements_file=None,
     uac_admin=True,          # ← 管理员权限 (跟 main.py run_as_admin() 配套)
     icon=None,               # 想要图标就放 .ico 路径, 例: 'app.ico'
+)
+
+# COLLECT: 收 binaries / zipfiles / datas 到 DiceTool/_internal/
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll'],
+    name='DiceTool',
 )

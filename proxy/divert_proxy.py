@@ -203,6 +203,8 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
 
         self.write_state(target_dice=None, mode='K')
 
+        # v2.5.0: onedir 模式下, 子进程走 sys.executable (同一个 DiceTool.exe)
+        # onedir + PyInstaller 6.21 子进程 import 链:  bootloader 会从 _MEIPASS=DiceTool/_internal/ 加载 modules
         if hasattr(sys, '_MEIPASS'):
             cmd_prefix = [sys.executable, '--mitmdump']
         else:
