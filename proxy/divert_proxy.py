@@ -239,9 +239,15 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
             if sys.platform == 'win32':
                 creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP | 134217728
 
-            # v2.5.2: 调试日志 — 把子进程 cmd + 输出写到 dice_debug.log
-            # 引擎启动超时时爸截图发我看, 我能精确定位
+            # v2.5.4: 子进程 stdout 重定向到 dice_child.log 文件
+            # mitmproxy 11.x print() 不用 flush=True, PIPE 会被 C 层 buffer
+            # 用文件 + 隔 1s 读就能拿到启动失败信息
             debug_log = os.path.join(os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd(), "dice_debug.log")
+            child_log = os.path.join(os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd(), "dice_child.log")
+            # 删旧 child log
+            try: os.remove(child_log)
+            except: pass
+
             with open(debug_log, 'a', encoding='utf-8') as f:
                 f.write(f'\n=== {time.strftime("%Y-%m-%d %H:%M:%S")} 启动引擎 ===\n')
                 f.write(f'  cmd: {cmd}\n')
@@ -249,18 +255,23 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 f.write(f'  sys.executable: {sys.executable}\n')
                 f.write(f'  sys._MEIPASS2: {env.get("_MEIPASS2", None)}\n')
 
+            # 开文件接受子进程 stdout (不用 PIPE, 避免 C 层 buffer)
+            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=1)  # line buffered
+
             self._process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=self._child_log_file,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
                 creationflags=creation_flags,
                 env=env
             )
 
+            self._child_log_path = child_log
+            self._child_log_file_handle = self._child_log_file
+
             with open(debug_log, 'a', encoding='utf-8') as f:
                 f.write(f'  pid: {self._process.pid}\n')
+                f.write(f'  child_log: {child_log}\n')
         except Exception as e:
             self._error = f'启动mitmdump失败: {e}'
             try:
@@ -285,48 +296,85 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
     def _read_output(self):
         """读取子进程stdout，解析addon输出的JSON行"""
         debug_log = os.path.join(os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd(), "dice_debug.log")
+        child_log = getattr(self, '_child_log_path', None)
         try:
-            for line in self._process.stdout:
-                line = line.strip()
-                if not line:
-                    continue
+            if not child_log:
+                # 退到 PIPE 模式 (安全路径)
+                for line in self._process.stdout:
+                    line = line.strip()
+                    if line:
+                        self._parse_child_line(line)
+                return
 
-                # v2.5.2: 所有子进程输出写日志, 帮调试
+            # v2.5.4: 从文件读子进程输出 (不是 PIPE, 避免 C 层 buffer)
+            last_size = 0
+            while True:
                 try:
-                    with open(debug_log, 'a', encoding='utf-8') as f:
-                        f.write(f'  [child] {line}\n')
-                except: pass
-
-                if line.startswith('{"type":'):
-                    try:
-                        msg = json.loads(line)
-                        self._handle_addon_message(msg)
-                    except json.JSONDecodeError:
+                    if not os.path.exists(child_log):
+                        time.sleep(0.1)
                         continue
-                elif 'Proxy server listening' in line or 'Local redirector' in line:
-                    self._running = True
-                    print(f'[ProxyEngine] 就绪: {line}')
-                elif 'Error' in line or 'error' in line or 'Cannot' in line:
-                    print(f'[ProxyEngine] {line}')
-                    if not self._running:
-                        self._error = line
-
-                    if self._on_ws_message:
-                        err_msg = json.dumps({'type': 'diag_error', 'msg': line}, ensure_ascii=False)
-                        self._on_ws_message('diag', err_msg)
-                elif 'WinDivert' in line or 'driver' in line.lower():
-
-                    print(f'[ProxyEngine] {line}')
-                    if self._on_ws_message:
-                        err_msg = json.dumps({'type': 'diag_error', 'msg': line}, ensure_ascii=False)
-                        self._on_ws_message('diag', err_msg)
-
-                elif 'Cannot spawn' in line:
-                    self._error = line
+                    cur_size = os.path.getsize(child_log)
+                    if cur_size > last_size:
+                        with open(child_log, 'r', encoding='utf-8', errors='ignore') as f:
+                            f.seek(last_size)
+                            new_text = f.read()
+                        last_size = cur_size
+                        for line in new_text.splitlines():
+                            line = line.strip()
+                            if line:
+                                self._parse_child_line(line)
+                    else:
+                        # 检查子进程是否还活着
+                        if self._process.poll() is not None and cur_size == last_size:
+                            # 进程死了, 读剩余
+                            with open(child_log, 'r', encoding='utf-8', errors='ignore') as f:
+                                f.seek(last_size)
+                                new_text = f.read()
+                            for line in new_text.splitlines():
+                                line = line.strip()
+                                if line:
+                                    self._parse_child_line(line)
+                            break
+                    time.sleep(0.1)
+                except Exception:
+                    time.sleep(0.1)
         except Exception:
             pass
         finally:
             self._running = False
+
+    def _parse_child_line(self, line: str):
+        """解析子进程一行输出"""
+        debug_log = os.path.join(os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd(), "dice_debug.log")
+        try:
+            with open(debug_log, 'a', encoding='utf-8') as f:
+                f.write(f'  [child] {line}\n')
+        except: pass
+
+        if line.startswith('{"type":'):
+            try:
+                msg = json.loads(line)
+                self._handle_addon_message(msg)
+            except json.JSONDecodeError:
+                return
+        elif 'Proxy server listening' in line or 'Local redirector' in line:
+            self._running = True
+            print(f'[ProxyEngine] 就绪: {line}')
+        elif 'Error' in line or 'error' in line or 'Cannot' in line:
+            print(f'[ProxyEngine] {line}')
+            if not self._running:
+                self._error = line
+
+            if self._on_ws_message:
+                err_msg = json.dumps({'type': 'diag_error', 'msg': line}, ensure_ascii=False)
+                self._on_ws_message('diag', err_msg)
+        elif 'WinDivert' in line or 'driver' in line.lower():
+            print(f'[ProxyEngine] {line}')
+            if self._on_ws_message:
+                err_msg = json.dumps({'type': 'diag_error', 'msg': line}, ensure_ascii=False)
+                self._on_ws_message('diag', err_msg)
+        elif 'Cannot spawn' in line:
+            self._error = line
 
     def _handle_addon_message(self, msg: dict):
         """处理addon发来的消息"""
@@ -371,6 +419,12 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 self._process.wait(timeout=5)
             except:
                 pass
+
+        # v2.5.4: 关 child log file handle
+        if hasattr(self, '_child_log_file_handle'):
+            try: self._child_log_file_handle.close()
+            except: pass
+            self._child_log_file_handle = None
 
         self._process = None
         self._running = False
