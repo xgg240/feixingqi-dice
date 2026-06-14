@@ -37,6 +37,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+          # 验证 mitmproxy 装好了 (spec 编译时依赖它)
+          python -c "import mitmproxy; import mitmproxy.tools.main; import mitmproxy.dump; print(f'[verify] mitmproxy {mitmproxy.__version__} OK')"
 
       - name: PyInstaller build
         run: pyinstaller DiceTool.spec --clean

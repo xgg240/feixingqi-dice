@@ -4,7 +4,7 @@
 
 mitmproxy==8.0.0          # mitmdump 子进程 + addon 框架
 pycryptodomex==3.19.0     # cryptography 依赖
-cryptography==42.0.0      # emu_cert 算证书 hash
+cryptography==36.0.2      # emu_cert 算证书 hash (mitmproxy 8.0.0 要 cryptography<37, 降到兼容版本)
 certifi==2023.7.22        # CA bundle
 requests==2.31.0          # HTTP 客户端
 aioquic==0.9.21           # mitmproxy 依赖
