@@ -268,9 +268,9 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 f.write(f'  sys.executable: {sys.executable}\n')
                 f.write(f'  sys._MEIPASS2: {env.get("_MEIPASS2", None)}\n')
 
-            # v2.5.7: 用 bufsize=0 (unbuffered), 原始 fd, 子进程 C 层 stdout 也能立刻看到
-            # line-buffered 在 PyInstaller bootloader 下 C 子进程继承不到 Python buffer
-            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=0)
+            # v2.5.7 fix: buffering=0 + text mode 报 ValueError, 退回 line-buffered
+            # PyInstaller bootloader 下 C 子进程不一定 flush, 但 file mode 不会 buffer
+            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=1)
 
             self._process = subprocess.Popen(
                 cmd,
