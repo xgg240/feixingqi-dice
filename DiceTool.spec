@@ -5,13 +5,33 @@
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 
-# mitmproxy 8 用 addon 动态加载, 普通 --hidden-import 不够, 必须 collect_all
-mitm_datas, mitm_bins, mitm_hidden = collect_all('mitmproxy')
-tk_datas, tk_bins, tk_hidden = collect_all('tkinter')
+# mitmproxy 8 用 addon 动态加载, 必须递归扫所有子 module
+# collect_all 只能抓到 entry points + 顶层包, addon 内部的子 module 容易漏
+# 用 collect_submodules 递归抓, 这是关键修复
+try:
+    mitm_datas, mitm_bins, mitm_hidden = collect_all('mitmproxy')
+    print(f'[spec] collect_all mitmproxy: {len(mitm_hidden)} hidden imports, {len(mitm_bins)} binaries, {len(mitm_datas)} datas')
+except Exception as e:
+    print(f'[spec] WARN collect_all mitmproxy failed: {e}')
+    mitm_datas, mitm_bins, mitm_hidden = [], [], []
+
+# 递归扫 mitmproxy 所有子 module (补 collect_all 的漏)
+try:
+    mitm_submodules = collect_submodules('mitmproxy')
+    print(f'[spec] collect_submodules mitmproxy: {len(mitm_submodules)} modules')
+    mitm_hidden = list(set(mitm_hidden + mitm_submodules))
+except Exception as e:
+    print(f'[spec] WARN collect_submodules mitmproxy failed: {e}')
+
+try:
+    tk_datas, tk_bins, tk_hidden = collect_all('tkinter')
+except Exception as e:
+    print(f'[spec] WARN collect_all tkinter failed: {e}')
+    tk_datas, tk_bins, tk_hidden = [], [], []
 
 # mitmproxy 自带 windivert.dll (Win 流量抓包驱动), 必须塞进 _MEIPASS
 wd_bin = []
@@ -43,29 +63,10 @@ a = Analysis(
         'gui.main_window',
         'proxy.divert_proxy',
         'proxy.addon_script',
-        # 3.14 / 3.13 偶发需要这些
+        # 业务依赖
         'pydivert',
         'cryptography',
         'cryptography.hazmat.primitives.serialization',
-        # mitmproxy 动态加载 (addons / dump master / tools.main) — 单文件模式必加
-        'mitmproxy.tools.main',
-        'mitmproxy.tools.dump',
-        'mitmproxy.dump',
-        'mitmproxy.addon_manager',
-        'mitmproxy.proxy',
-        'mitmproxy.proxy.layers',
-        'mitmproxy.proxy.mode_servers',
-        'mitmproxy.proxy.context',
-        'mitmproxy.master',
-        'mitmproxy.http',
-        'mitmproxy.websocket',
-        'mitmproxy.certs',
-        'mitmproxy.flow',
-        'mitmproxy.event',
-        'mitmproxy.log',
-        'mitmproxy.options',
-        'mitmproxy.command_manager',
-        'mitmproxy.console',
     ],
     hookspath=[],
     runtime_hooks=[],
