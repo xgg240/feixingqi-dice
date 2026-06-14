@@ -27,6 +27,23 @@ try:
 except Exception as e:
     print(f'[spec] WARN collect_submodules mitmproxy failed: {e}')
 
+# v2.5.6: mitmproxy_rs 是 Rust 编译的 pyd (含 windivert 逻辑),
+# PyInstaller 不会自动抓 — 必须手动 collect_data_files + collect_submodules
+rs_datas, rs_bins, rs_hidden = [], [], []
+try:
+    rs_datas, rs_bins, rs_hidden = collect_all('mitmproxy_rs')
+    print(f'[spec] collect_all mitmproxy_rs: {len(rs_hidden)} hidden, {len(rs_bins)} bins, {len(rs_datas)} datas')
+except Exception as e:
+    print(f'[spec] WARN collect_all mitmproxy_rs failed: {e}')
+
+# Win 平台还要抓 mitmproxy_windows (Windows-specific hooks)
+win_rs_datas, win_rs_bins, win_rs_hidden = [], [], []
+try:
+    win_rs_datas, win_rs_bins, win_rs_hidden = collect_all('mitmproxy_windows')
+    print(f'[spec] collect_all mitmproxy_windows: {len(win_rs_hidden)} hidden, {len(win_rs_bins)} bins')
+except Exception as e:
+    print(f'[spec] WARN collect_all mitmproxy_windows failed: {e}')
+
 try:
     tk_datas, tk_bins, tk_hidden = collect_all('tkinter')
 except Exception as e:
@@ -56,9 +73,13 @@ biz_datas = [
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=mitm_bins + tk_bins + wd_bin,
-    datas=mitm_datas + tk_datas + biz_datas,
-    hiddenimports=mitm_hidden + tk_hidden + [
+    binaries=mitm_bins + rs_bins + win_rs_bins + tk_bins + wd_bin,
+    datas=mitm_datas + rs_datas + win_rs_datas + tk_datas + biz_datas,
+    hiddenimports=mitm_hidden + rs_hidden + win_rs_hidden + tk_hidden + [
+        # v2.5.6: mitmproxy_rs 是 Rust pyd, 必须显式 hiddenimport
+        # (它的 __init__.py 在 PyInstaller 默认不扫, 跑到 mode_servers.py 才崩)
+        'mitmproxy_rs',
+        'mitmproxy_windows' if sys.platform == 'win32' else 'mitmproxy_macos',
         'core.emu_cert',
         'gui.main_window',
         'proxy.divert_proxy',
