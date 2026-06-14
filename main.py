@@ -305,7 +305,7 @@ class DiceToolApp:
 def main():
     if '--mitmdump' in sys.argv:
         sys.argv.remove('--mitmdump')
-        from mitmproxy.tools.main import mitmdump
+        from mitmproxy.tools.dump import mitmdump
         mitmdump()
         return
     if sys.platform == 'win32' and not is_admin():
