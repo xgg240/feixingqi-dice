@@ -268,16 +268,25 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 f.write(f'  sys.executable: {sys.executable}\n')
                 f.write(f'  sys._MEIPASS2: {env.get("_MEIPASS2", None)}\n')
 
-            # v2.5.7 fix: buffering=0 + text mode 报 ValueError, 退回 line-buffered
-            # PyInstaller bootloader 下 C 子进程不一定 flush, 但 file mode 不会 buffer
-            self._child_log_file = open(child_log, 'w', encoding='utf-8', buffering=1)
+            # v2.5.10: 退回 PIPE 模式, 走 _read_output 实时读, 不靠文件
+            # 之前 open(file, 'w', buffering=1) + Popen(stdout=file_obj) 路径在
+            # PyInstaller onedir + Win + admin token 下可靠不住 (子进程 file handle 不被继承 / 0 byte)
+            # PIPE 读不到时, dice_child_crash.log + 心跳 [hb] 足够诊断
+            # 先创建空文件, 让一些"看文件名"逻辑不报错
+            try: open(child_log, 'a').close()
+            except: pass
+
+            # 不再设 self._child_log_path — _read_output 看到 None 就走 PIPE 分支
+            self._child_log_path = None
+            self._child_log_file = None
 
             self._process = subprocess.Popen(
                 cmd,
-                stdout=self._child_log_file,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 creationflags=creation_flags,
-                env=env
+                env=env,
+                bufsize=0,  # unbuffered
             )
 
             self._child_log_path = child_log
