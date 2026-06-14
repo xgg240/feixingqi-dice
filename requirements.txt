@@ -10,8 +10,8 @@ requests==2.31.0          # HTTP 客户端
 aioquic==0.9.21           # mitmproxy 依赖
 pydivert==2.1.0           # WinDivert Python wrapper (流量抓包/重定向)
 tornado==6.4              # mitmproxy 内部 HTTP
-flask==3.0.0              # mitmproxy 依赖
-werkzeug==3.0.0           # flask 依赖
+flask>=1.1.1,<2.1        # mitmproxy 8.0.0 依赖 (上 3.x 会冲突)
+werkzeug<2.1              # mitmproxy 8.0.0 依赖
 bcrypt==4.1.0             # mitmproxy 依赖
 argon2-cffi==23.1.0       # mitmproxy 依赖
 zstandard==0.22.0         # mitmproxy 依赖
