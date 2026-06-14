@@ -379,7 +379,27 @@ def main():
             with open(_crash_log, 'a', encoding='utf-8') as _f:
                 _f.write('[step 3] 调用 mitmdump() ...\n')
                 _f.flush()
-            mitmdump()
+
+            # v2.5.9: 开后台线程, 每 1s 报个心跳, 看 mitmdump 到底死在哪一秒
+            import threading as _th
+            _alive_flag = [True]
+            def _heartbeat():
+                for i in range(120):  # 最多报 120s 心跳
+                    if not _alive_flag[0]:
+                        return
+                    time.sleep(1)
+                    try:
+                        with open(_crash_log, 'a', encoding='utf-8') as _f:
+                            _f.write(f'[hb] +{i+1}s 还在 mitmdump() 里 ...\n')
+                    except: pass
+            _hb_thread = _th.Thread(target=_heartbeat, daemon=True)
+            _hb_thread.start()
+
+            try:
+                mitmdump()
+            finally:
+                _alive_flag[0] = False
+
             with open(_crash_log, 'a', encoding='utf-8') as _f:
                 _f.write('[step 3] mitmdump() 返回 (正常退出)\n')
         except SystemExit as e:

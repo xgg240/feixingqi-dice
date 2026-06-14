@@ -117,8 +117,8 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll'],
+    upx=False,
+    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', 'mitmproxy_rs.pyd', '*.pyd', '*.dll'],
     runtime_tmpdir=None,
     console=False,           # GUI 模式, 不要黑色 cmd 窗口
     disable_windowed_traceback=False,
@@ -136,7 +136,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
-    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll'],
+    upx=False,
+    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', 'mitmproxy_rs.pyd', '*.pyd', '*.dll'],
     name='DiceTool',
 )
