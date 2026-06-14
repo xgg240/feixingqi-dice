@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  contents: write   # 让 GITHUB_TOKEN 能创建 release (默认 read-only 不够)
+
 jobs:
   build:
     runs-on: windows-latest
