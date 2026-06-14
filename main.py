@@ -347,22 +347,14 @@ def main():
                     import traceback as _tb1; _f.write(_tb1.format_exc())
                 sys.exit(1)
 
-            # step 1.5: import mitmproxy_rs (Rust pyd) — v2.5.6 已抓, 但看是否 OK
+            # v2.6.0: mitmproxy 10.x 用 pydivert (Python 层 windivert 绑定)
             try:
-                import mitmproxy_rs
+                import pydivert
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write(f'[step 1.5] import mitmproxy_rs OK, file={mitmproxy_rs.__file__}\n')
-                    # 看 local (win redirector) 子模块能不能 import
-                    try:
-                        from mitmproxy_rs import local
-                        _f.write(f'[step 1.6] import mitmproxy_rs.local OK\n')
-                    except BaseException as _e2:
-                        _f.write(f'[step 1.6] FAIL mitmproxy_rs.local: {type(_e2).__name__}: {_e2}\n')
+                    _f.write(f'[step 1.5] import pydivert OK, version={pydivert.__version__ if hasattr(pydivert, "__version__") else "?"}\n')
             except BaseException as _e:
                 with open(_crash_log, 'a', encoding='utf-8') as _f:
-                    _f.write(f'[step 1.5] FAIL mitmproxy_rs: {type(_e).__name__}: {_e}\n')
-                    import traceback as _tb15; _f.write(_tb15.format_exc())
-                # 不 exit, 试试 mitmdump() 自己会报什么
+                    _f.write(f'[step 1.5] FAIL pydivert: {type(_e).__name__}: {_e}\n')
 
             # step 2: import mitmproxy.tools.main
             try:

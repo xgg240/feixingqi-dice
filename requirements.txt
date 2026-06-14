@@ -1,15 +1,18 @@
-# 飞行棋骰子工具 v2.4 — Win 编译依赖
-# mitmproxy 升级到 11.x (兼容 cryptography 42 + flask 3 + pyOpenSSL 24 + Python 3.12)
-# 旧 8.0.0 锁了一堆 2023 年初版本, 跟新 Python / 编译环境全冲突
+# 飞行棋骰子工具 v2.6 — Win 编译依赖
+# v2.6.0 降级: mitmproxy 11.x 强依赖 mitmproxy_rs (Rust pyd), 在 PyInstaller onedir + Win + admin 下
+# windivert 驱动加载时 native panic, OS terminate 静默, Python 异常层接不到
+# 5 个版本探针 (v2.5.5→v2.5.10) 都没修好
+# v2.6.0 改用 mitmproxy 10.x: 纯 Python + 老 pydivert 抓包, 走的是 Python 层 windivert, native panic 概率低
 
-mitmproxy==11.0.0         # mitmdump 子进程 + addon 框架 (原 8.0.0 升 11.x 兼容 Py3.12)
+mitmproxy==10.0.0         # 降级到 10.x: 纯 Python, 不用 mitmproxy_rs
+pydivert==2.1.0           # 老 windivert 绑定 (mitmproxy 10.x 配这个)
 pycryptodomex==3.19.0     # cryptography 依赖
-cryptography==42.0.0      # emu_cert 算证书 hash (mitmproxy 11.x 兼容)
+cryptography==42.0.0      # emu_cert 算证书 hash
 certifi==2023.7.22        # CA bundle
 requests==2.31.0          # HTTP 客户端
 
-# mitmproxy 11.x 自动拉这些, 不用手动锁
-# aioquic / pydivert / tornado / flask / werkzeug / bcrypt / argon2-cffi /
+# v2.6.0 删 mitmproxy-rs 相关, 走纯 Python + pydivert
+# aioquic / tornado / flask / werkzeug / bcrypt / argon2-cffi /
 # zstandard / h2 / hpack / hyperframe / service-identity / pyOpenSSL /
 # urllib3 / click / itsdangerous / markupsafe / wsproto / publicsuffix2 /
 # sortedcontainers / pyparsing / pyasn1 / pyasn1-modules / ruamel.yaml /

@@ -9,9 +9,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 
-# mitmproxy 8 用 addon 动态加载, 必须递归扫所有子 module
-# collect_all 只能抓到 entry points + 顶层包, addon 内部的子 module 容易漏
-# 用 collect_submodules 递归抓, 这是关键修复
+# v2.6.0 降级 mitmproxy 10.x (无 mitmproxy_rs), spec 全面简化
 try:
     mitm_datas, mitm_bins, mitm_hidden = collect_all('mitmproxy')
     print(f'[spec] collect_all mitmproxy: {len(mitm_hidden)} hidden imports, {len(mitm_bins)} binaries, {len(mitm_datas)} datas')
@@ -27,22 +25,7 @@ try:
 except Exception as e:
     print(f'[spec] WARN collect_submodules mitmproxy failed: {e}')
 
-# v2.5.6: mitmproxy_rs 是 Rust 编译的 pyd (含 windivert 逻辑),
-# PyInstaller 不会自动抓 — 必须手动 collect_data_files + collect_submodules
-rs_datas, rs_bins, rs_hidden = [], [], []
-try:
-    rs_datas, rs_bins, rs_hidden = collect_all('mitmproxy_rs')
-    print(f'[spec] collect_all mitmproxy_rs: {len(rs_hidden)} hidden, {len(rs_bins)} bins, {len(rs_datas)} datas')
-except Exception as e:
-    print(f'[spec] WARN collect_all mitmproxy_rs failed: {e}')
-
-# Win 平台还要抓 mitmproxy_windows (Windows-specific hooks)
-win_rs_datas, win_rs_bins, win_rs_hidden = [], [], []
-try:
-    win_rs_datas, win_rs_bins, win_rs_hidden = collect_all('mitmproxy_windows')
-    print(f'[spec] collect_all mitmproxy_windows: {len(win_rs_hidden)} hidden, {len(win_rs_bins)} bins')
-except Exception as e:
-    print(f'[spec] WARN collect_all mitmproxy_windows failed: {e}')
+# v2.6.0: 不再抓 mitmproxy_rs / mitmproxy_windows (10.x 没有 Rust pyd, 走老 pydivert)
 
 try:
     tk_datas, tk_bins, tk_hidden = collect_all('tkinter')
@@ -50,7 +33,7 @@ except Exception as e:
     print(f'[spec] WARN collect_all tkinter failed: {e}')
     tk_datas, tk_bins, tk_hidden = [], [], []
 
-# mitmproxy 自带 windivert.dll (Win 流量抓包驱动), 必须塞进 _MEIPASS
+# v2.6.0: mitmproxy 10.x 自带 windivert.dll (在 mitmproxy/windows/ 下)
 wd_bin = []
 try:
     import mitmproxy.windows
@@ -63,6 +46,19 @@ try:
 except Exception as e:
     print(f'[spec] WARN: cannot locate windivert.dll: {e}')
 
+# v2.6.0: pydivert 2.1+ 也带 windivert 驱动 (WinDivert.dll/Sys)
+pd_bin = []
+try:
+    import pydivert
+    pd_dir = os.path.dirname(pydivert.__file__)
+    for fn in os.listdir(pd_dir):
+        if fn.lower().endswith('.dll') or fn.lower().endswith('.sys'):
+            pd_bin.append((os.path.join(pd_dir, fn), '.'))
+    if pd_bin:
+        print(f'[spec] pydivert 抓了 {len(pd_bin)} 个 dll/sys')
+except Exception as e:
+    print(f'[spec] WARN: pydivert 扫描失败: {e}')
+
 # 业务代码 (你写的 5 个 .py + 2 个 __init__.py)
 biz_datas = [
     ('core', 'core'),
@@ -73,19 +69,16 @@ biz_datas = [
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=mitm_bins + rs_bins + win_rs_bins + tk_bins + wd_bin,
-    datas=mitm_datas + rs_datas + win_rs_datas + tk_datas + biz_datas,
-    hiddenimports=mitm_hidden + rs_hidden + win_rs_hidden + tk_hidden + [
-        # v2.5.6: mitmproxy_rs 是 Rust pyd, 必须显式 hiddenimport
-        # (它的 __init__.py 在 PyInstaller 默认不扫, 跑到 mode_servers.py 才崩)
-        'mitmproxy_rs',
-        'mitmproxy_windows' if sys.platform == 'win32' else 'mitmproxy_macos',
+    binaries=mitm_bins + tk_bins + wd_bin + pd_bin,
+    datas=mitm_datas + tk_datas + biz_datas,
+    hiddenimports=mitm_hidden + tk_hidden + [
         'core.emu_cert',
         'gui.main_window',
         'proxy.divert_proxy',
         'proxy.addon_script',
         # 业务依赖
         'pydivert',
+        'pydivert.windivert',
         'cryptography',
         'cryptography.hazmat.primitives.serialization',
     ],
@@ -95,6 +88,10 @@ a = Analysis(
         # 排除不需要的库减小体积
         'unittest', 'pydoc_data', 'lib2to3', 'tkinter.test',
         'matplotlib', 'numpy', 'scipy', 'pandas',
+        # v2.6.0: 明确排除 mitmproxy_rs (10.x 没装, 但保险)
+        'mitmproxy_rs',
+        'mitmproxy_windows',
+        'mitmproxy_macos',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
