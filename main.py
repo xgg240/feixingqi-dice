@@ -1,6 +1,16 @@
 import sys
 import os
 import subprocess
+
+# v2.5.5: 子进程极早期探针 (在 import mitmproxy 之前) — 看子进程是否进得了 main.py
+try:
+    _boot_log = os.path.join(
+        os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd(),
+        'dice_child_crash.log'
+    )
+    with open(_boot_log, 'a', encoding='utf-8') as _bf:
+        _bf.write(f'[boot] main.py loaded, frozen={getattr(sys, "frozen", False)}, argv[0]={sys.argv[0] if sys.argv else "?"}\n')
+except: pass
 import time
 import threading
 import json
@@ -305,8 +315,49 @@ class DiceToolApp:
 def main():
     if '--mitmdump' in sys.argv:
         sys.argv.remove('--mitmdump')
-        from mitmproxy.tools.main import mitmdump
-        mitmdump()
+        # v2.5.5: 子进程任何错误都写到 dice_child_crash.log, 不靠 stdout
+        _crash_log = os.path.join(
+            os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.getcwd(),
+            'dice_child_crash.log'
+        )
+        # 第一次写 (证明子进程至少跑到这里)
+        try:
+            with open(_crash_log, 'a', encoding='utf-8') as _f:
+                _f.write(f'\n=== {time.strftime("%Y-%m-%d %H:%M:%S")} 子进程启动 ===\n')
+                _f.write(f'  python: {sys.version}\n')
+                _f.write(f'  frozen: {getattr(sys, "frozen", False)}\n')
+                _f.write(f'  _MEIPASS: {getattr(sys, "_MEIPASS", None)}\n')
+                _f.write(f'  argv: {sys.argv}\n')
+        except: pass
+        try:
+            try:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write('[step 1] import mitmproxy.tools.main ...\n')
+            except: pass
+            from mitmproxy.tools.main import mitmdump
+            try:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 2] mitmdump={mitmdump!r}, 调用 ...\n')
+            except: pass
+            mitmdump()
+        except SystemExit as e:
+            try:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[mitmdump] SystemExit code={e.code}\n')
+            except: pass
+        except BaseException as e:
+            import traceback as _tb
+            try:
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[mitmdump] CRASH: {type(e).__name__}: {e}\n')
+                    _f.write(_tb.format_exc())
+            except: pass
+            try:
+                sys.stderr.write(f'[mitmdump] CRASH: {type(e).__name__}: {e}\n')
+                _tb.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+            except: pass
+            sys.exit(1)
         return
     if sys.platform == 'win32' and not is_admin():
         run_as_admin()
