@@ -1,0 +1,32 @@
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.venv12/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Secrets (父的秘钥/配置)
+*.key
+*.pem
+config.ini
+.env
+.env.local
+
+# Windows
+Thumbs.db
+desktop.ini
