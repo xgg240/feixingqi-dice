@@ -7,7 +7,7 @@
 mitmproxy==10.0.0         # 降级到 10.x: 纯 Python, 不用 mitmproxy_rs
 pydivert==2.1.0           # 老 windivert 绑定 (mitmproxy 10.x 配这个)
 pycryptodomex==3.19.0     # cryptography 依赖
-cryptography==42.0.0      # emu_cert 算证书 hash
+cryptography==41.0.7      # emu_cert 算证书 hash (mitmproxy 10.x 要 <41.1)
 certifi==2023.7.22        # CA bundle
 requests==2.31.0          # HTTP 客户端
 
