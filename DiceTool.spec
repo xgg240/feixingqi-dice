@@ -9,7 +9,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 
-# v2.6.0 降级 mitmproxy 10.x (无 mitmproxy_rs), spec 全面简化
+# v2.6.2 回归 mitmproxy 8.0.0 老架构 (纯 Python, mode_specs.py 不引 mitmproxy_rs)
 try:
     mitm_datas, mitm_bins, mitm_hidden = collect_all('mitmproxy')
     print(f'[spec] collect_all mitmproxy: {len(mitm_hidden)} hidden imports, {len(mitm_bins)} binaries, {len(mitm_datas)} datas')
@@ -25,7 +25,8 @@ try:
 except Exception as e:
     print(f'[spec] WARN collect_submodules mitmproxy failed: {e}')
 
-# v2.6.0: 不再抓 mitmproxy_rs / mitmproxy_windows (10.x 没有 Rust pyd, 走老 pydivert)
+# v2.6.2: 回归 mitmproxy 8.0.0 老架构 (纯 Python, 没 mitmproxy_rs)
+# v2.6.0/2.6.1 误判 "10.x 没有 Rust pyd" — 实际 9.x/10.x/11.x 的 mode_specs.py 都强 import mitmproxy_rs
 
 try:
     tk_datas, tk_bins, tk_hidden = collect_all('tkinter')
@@ -88,7 +89,7 @@ a = Analysis(
         # 排除不需要的库减小体积
         'unittest', 'pydoc_data', 'lib2to3', 'tkinter.test',
         'matplotlib', 'numpy', 'scipy', 'pandas',
-        # v2.6.0: 明确排除 mitmproxy_rs (10.x 没装, 但保险)
+        # v2.6.2: 不用 Rust 扩展 (mitmproxy 8.x 没这些 module, 列着无害)
         'mitmproxy_rs',
         'mitmproxy_windows',
         'mitmproxy_macos',
@@ -115,7 +116,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', 'mitmproxy_rs.pyd', '*.pyd', '*.dll'],
+    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', '*.pyd', '*.dll'],
     runtime_tmpdir=None,
     console=False,           # GUI 模式, 不要黑色 cmd 窗口
     disable_windowed_traceback=False,
@@ -134,6 +135,6 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', 'mitmproxy_rs.pyd', '*.pyd', '*.dll'],
+    upx_exclude=['windivert.dll', 'vcruntime140.dll', 'msvcp140.dll', '*.pyd', '*.dll'],
     name='DiceTool',
 )

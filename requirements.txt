@@ -1,19 +1,21 @@
-# 飞行棋骰子工具 v2.6 — Win 编译依赖
-# v2.6.0 降级: mitmproxy 11.x 强依赖 mitmproxy_rs (Rust pyd), 在 PyInstaller onedir + Win + admin 下
-# windivert 驱动加载时 native panic, OS terminate 静默, Python 异常层接不到
-# 5 个版本探针 (v2.5.5→v2.5.10) 都没修好
-# v2.6.0 改用 mitmproxy 10.x: 纯 Python + 老 pydivert 抓包, 走的是 Python 层 windivert, native panic 概率低
+# 飞行棋骰子工具 v2.6.2 — Win 编译依赖
+# v2.6.1 失败: mitmproxy 9.x/10.x/11.x 的 mode_specs.py 第 33 行都 import mitmproxy_rs
+#   但 PyInstaller onedir + Win + admin 下 mitmproxy_rs (Rust pyd) windivert 驱动加载 native panic
+#   OS terminate 静默, 5 个版本 (v2.5.5→v2.5.10 + v2.6.0/2.6.1) 都没修好
+# v2.6.2 回到 v2.4 的 mitmproxy 8.0.0 老架构:
+#   - mode_specs.py 是纯 Python (没 import mitmproxy_rs 这一行, 9.x 才有)
+#   - 抓包走 pydivert (Python 层 windivert, 不碰 Rust 扩展)
+#   - 这是 v2.4 已经验证 28 个 tag 全部 OK 的版本组合
 
-mitmproxy==10.0.0         # 降级到 10.x: 纯 Python, 不用 mitmproxy_rs
-pydivert==2.1.0           # 老 windivert 绑定 (mitmproxy 10.x 配这个)
+mitmproxy==8.0.0          # 8.x 纯 Python, mode_specs.py 不引 mitmproxy_rs
+pydivert==2.1.0           # 老 windivert 绑定 (mitmproxy 8.x 配这个, v2.4 验过)
 pycryptodomex==3.19.0     # cryptography 依赖
-cryptography==41.0.7      # emu_cert 算证书 hash (mitmproxy 10.x 要 <41.1)
+cryptography==41.0.7      # emu_cert 算证书 hash (mitmproxy 8.x 要 <42)
 certifi==2023.7.22        # CA bundle
 requests==2.31.0          # HTTP 客户端
 
-# v2.6.0 删 mitmproxy-rs 相关, 走纯 Python + pydivert
-# aioquic / tornado / flask / werkzeug / bcrypt / argon2-cffi /
-# zstandard / h2 / hpack / hyperframe / service-identity / pyOpenSSL /
-# urllib3 / click / itsdangerous / markupsafe / wsproto / publicsuffix2 /
-# sortedcontainers / pyparsing / pyasn1 / pyasn1-modules / ruamel.yaml /
-# six / attrs / passlib / tldextract / pyelftools — pip 自动解决
+# mitmproxy 8.x 配 aioquic / tornado / flask / werkzeug / bcrypt / argon2-cffi /
+# h2 / hpack / hyperframe / service-identity / pyOpenSSL / brotli / kaitaistruct /
+# zstandard / wsproto / publicsuffix2 / sortedcontainers / pyparsing /
+# pyasn1 / pyasn1-modules / ruamel.yaml / six / attrs / passlib / tldextract /
+# pyelftools / urllib3 / click / itsdangerous / markupsafe — pip 自动解决
