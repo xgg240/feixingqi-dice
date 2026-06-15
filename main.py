@@ -387,10 +387,32 @@ def main():
             _hb_thread = _th.Thread(target=_heartbeat, daemon=True)
             _hb_thread.start()
 
+            # v2.6.8: 把 mitmdump 的 stdout/stderr 转发到 crash log
+            # (mitmdump 内部 print + traceback 全部接住, 不然不知道为啥 SystemExit(1))
+            _log_fh = open(_crash_log, 'a', encoding='utf-8')
+            with open(_crash_log, 'a', encoding='utf-8') as _f:
+                _f.write(f'[step 3.0] redirecting stdout/stderr to crash log (orig={type(sys.stdout).__name__}/{type(sys.stderr).__name__})\n')
+            _orig_stdout, _orig_stderr = sys.stdout, sys.stderr
+            sys.stdout = _log_fh
+            sys.stderr = _log_fh
             try:
-                mitmdump()
-            finally:
-                _alive_flag[0] = False
+                try:
+                    mitmdump()
+                finally:
+                    _alive_flag[0] = False
+                    sys.stdout = _orig_stdout
+                    sys.stderr = _orig_stderr
+                    _log_fh.flush()
+                    _log_fh.close()
+            except BaseException as _mderr:
+                sys.stdout = _orig_stdout
+                sys.stderr = _orig_stderr
+                _log_fh.flush()
+                _log_fh.close()
+                with open(_crash_log, 'a', encoding='utf-8') as _f:
+                    _f.write(f'[step 3 mitmdump raised] {type(_mderr).__name__}: {_mderr}\n')
+                    import traceback as _tbmd; _f.write(_tbmd.format_exc())
+                raise
 
             with open(_crash_log, 'a', encoding='utf-8') as _f:
                 _f.write('[step 3] mitmdump() 返回 (正常退出)\n')
