@@ -1,21 +1,19 @@
-# 飞行棋骰子工具 v2.6.2 — Win 编译依赖
-# v2.6.1 失败: mitmproxy 9.x/10.x/11.x 的 mode_specs.py 第 33 行都 import mitmproxy_rs
-#   但 PyInstaller onedir + Win + admin 下 mitmproxy_rs (Rust pyd) windivert 驱动加载 native panic
-#   OS terminate 静默, 5 个版本 (v2.5.5→v2.5.10 + v2.6.0/2.6.1) 都没修好
-# v2.6.2 回到 v2.4 的 mitmproxy 8.0.0 老架构:
-#   - mode_specs.py 是纯 Python (没 import mitmproxy_rs 这一行, 9.x 才有)
-#   - 抓包走 pydivert (Python 层 windivert, 不碰 Rust 扩展)
-#   - 这是 v2.4 已经验证 28 个 tag 全部 OK 的版本组合
+# 飞行棋骰子工具 v2.6.3 — Win 编译依赖
+# v2.6.2 失败: mitmproxy 8.0.0 要 cryptography<37 + flask<2.1, 我手锁的 42/3.0 冲突
+# v2.6.3: 只锁顶层, 子依赖全让 pip 自动解 (mitmproxy 8 是 2022-03 老包, 锁太死反装不上)
+# mitmproxy 8.0.0 依赖元数据:
+#   cryptography<37 and >=36, flask<2.1 and >=1.1.1, pyOpenSSL<23, requests>=2.9.1,
+#   aioquic, tornado, brotli, h2, hpack, wsproto, zstandard, etc. — pip 自动解
 
 mitmproxy==8.0.0          # 8.x 纯 Python, mode_specs.py 不引 mitmproxy_rs
-pydivert==2.1.0           # 老 windivert 绑定 (mitmproxy 8.x 配这个, v2.4 验过)
-pycryptodomex==3.19.0     # cryptography 依赖
-cryptography==41.0.7      # emu_cert 算证书 hash (mitmproxy 8.x 要 <42)
+pydivert==2.1.0           # WinDivert Python wrapper (抓包/重定向, 跟 Rust 扩展无关)
+pycryptodomex==3.19.0     # 提速某些加密运算
 certifi==2023.7.22        # CA bundle
-requests==2.31.0          # HTTP 客户端
+requests>=2.28.0          # HTTP 客户端 (mitmproxy 8 要 >=2.9.1)
 
-# mitmproxy 8.x 配 aioquic / tornado / flask / werkzeug / bcrypt / argon2-cffi /
-# h2 / hpack / hyperframe / service-identity / pyOpenSSL / brotli / kaitaistruct /
-# zstandard / wsproto / publicsuffix2 / sortedcontainers / pyparsing /
-# pyasn1 / pyasn1-modules / ruamel.yaml / six / attrs / passlib / tldextract /
-# pyelftools / urllib3 / click / itsdangerous / markupsafe — pip 自动解决
+# emu_cert.py 用的 cryptography — 别锁, 让 mitmproxy 8 拉它要的 36.x 系列
+# (之前锁 41/42 全跟 mitmproxy 8 冲突, 锁 <37 才安全)
+
+# v2.6.3 教训: v2.4.0 那 24 行手锁子依赖是 2024 年写的, 跟 mitmproxy 8 (2022) 装不上
+# v2.6.3 只锁 5 个顶层, 业务依赖 (cryptography/aioquic/tornado/flask/pyOpenSSL) 全放开
+# spec excludes 保留 mitmproxy_rs/mitmproxy_macos (8.x 没这些, 排着无害)
