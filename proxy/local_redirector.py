@@ -1,7 +1,7 @@
 """
-v2.6.9 local redirector — mitmproxy 8.0.0 不支持 --mode local:xxx
+v2.7.0 local redirector — mitmproxy 8.0.0 不支持 --mode local:xxx
 (mitmproxy_rs 的 LocalRedirector 是 10.x/11.x 才合并的),
-pydivert 2.1.0 在 Python 层自己写.
+pydivert 在 Python 层自己写.
 
 原理:
   WeChatAppEx.exe 发起 TCP 连接 (orig_dst, orig_port)
@@ -17,8 +17,14 @@ pydivert 2.1.0 在 Python 层自己写.
 mitmdump 看 flow.client_address 是 127.0.0.1 (loss), 但 flow.server_address
 仍然是原目标 (从 SNI/Host 头拿的), addon_script.py 不需要 client_address 所以无感.
 
-filter: tcp and proc.name==WeChatAppEx.exe and tcp.DstPort!=8899
-  (防回环, mitmdump 连回去的 packet 也可能 match, 排除)
+filter: tcp and proc.name == WeChatAppEx.exe and tcp.DstPort != 8899
+  (空格 + 双等号是 pydivert 3.0+ / WinDivert 2.2+ filter 语法;
+   2.1.0 / WinDivert 1.3 不支持 proc.name + 不支持 '=='/ 空格, 报 WinError 87)
+
+v2.7.0 依赖:
+  - pydivert >= 3.1.3 (bundled WinDivert 2.2.2, 支持 proc.name filter)
+  - Python 3.10+ (PyInstaller 6.21 / GitHub Actions runner 用 3.12 没问题)
+  - Admin 权限 (WinDivert 驱动要 admin token, DiceTool.exe 已经 runas)
 """
 import os
 import sys
@@ -32,17 +38,16 @@ def _run_redirector(target_process: str, proxy_port: int,
     """跑 pydivert 重定向 loop, 在独立 thread 里. 异常写 log, 自然退出 on stop_event."""
     import pydivert
 
-    # filter: proc.name 是 case-insensitive, 跟 Windows 任务管理器一致
+    # filter: 语法跟 Wireshark display filter 类似, 必须 '==' 不是 '=',
+    # 必须有空格 (WinError 87 = 参数错误是 filter 解析失败)
     target_lower = target_process.lower()
-    # tcp.DstPort!=8899 防回环 — 8899 是 mitmdump listen port
-    # outbound (WeChatAppEx -> Internet) 改 dest 到本地
-    # inbound (mitmdump -> WeChatAppEx 走回包) 已经是 src=127.0.0.1:8899,
-    # 不会 match proc.name==WeChatAppEx.exe (mitmdump 子进程是 DiceTool.exe 自己)
+    # 排除 mitmdump listen port 双向 (回环 + mitmdump 反代回去的 conn)
+    # proc.name 是 WinDivert 2.0+ 扩展, 大小写不敏感
     flt = (
         f"tcp and "
-        f"proc.name=={target_lower} and "
-        f"tcp.DstPort!={proxy_port} and "
-        f"tcp.SrcPort!={proxy_port}"
+        f"proc.name == {target_lower} and "
+        f"tcp.DstPort != {proxy_port} and "
+        f"tcp.SrcPort != {proxy_port}"
     )
 
     def _log(msg: str) -> None:

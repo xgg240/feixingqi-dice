@@ -6,7 +6,9 @@
 #   aioquic, tornado, brotli, h2, hpack, wsproto, zstandard, etc. — pip 自动解
 
 mitmproxy==8.0.0          # 8.x 纯 Python, mode_specs.py 不引 mitmproxy_rs
-pydivert==2.1.0           # WinDivert Python wrapper (抓包/重定向, 跟 Rust 扩展无关)
+pydivert>=3.1.3            # v2.7.0: 升 3.x (WinDivert 2.2.2, 支持 proc.name filter + tcp.DstPort == 语法)
+                           # v2.1.0 是 WinDivert 1.3, 没 proc.name, 没带空格的 filter 语法
+                           # 装 2.1.0 报 WinError 87 (filter 解析失败)
 pycryptodomex==3.19.0     # 提速某些加密运算
 certifi==2023.7.22        # CA bundle
 requests>=2.28.0          # HTTP 客户端 (mitmproxy 8 要 >=2.9.1)
