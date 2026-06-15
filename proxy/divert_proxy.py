@@ -165,6 +165,7 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
         self._on_ws_message = None
         self._running = False
         self._error = None
+        self._redirector = None  # v2.6.9: pydivert local redirector (主进程跑)
 
         self._state_file = os.path.join(os.path.expanduser('~'), '.mitmproxy', 'dice_state.json')
 
@@ -211,8 +212,10 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
             launcher = 'from mitmproxy.tools.main import mitmdump; mitmdump()'
             cmd_prefix = [sys.executable, '-c', launcher]
 
-        # v2.5.7: 调试模式, 不走 local:xxx, 只跑 mitmdump (port 8899 + addon)
-        # 验 mitmproxy 本身能起来不 (排除 windivert/local redirector 的问题)
+        # v2.6.9: mitmproxy 8.0.0 不支持 --mode local:xxx (mitmproxy_rs LocalRedirector
+        # 是 10.x/11.x 才合并的). pydivert 自己在主进程做 local redirect, mitmdump
+        # 走 regular 模式 listen 8899, redirector 把 WeChatAppEx.exe 流量改 dst → 127.0.0.1:8899
+        # flow.server_address 仍是 pretty_host (SNI/Host 头没被改), mitmdump 正常转回原目标
         _use_debug_mode = os.environ.get('DICE_DEBUG_PROXY', '0') == '1'
         if _use_debug_mode:
             cmd = cmd_prefix + [
@@ -222,12 +225,11 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 '--set', 'flow_detail=0',
                 '-s', self._addon_script,
             ]
-            print(f'[ProxyEngine] 调试模式 (无 local:xxx): {cmd}')
+            print(f'[ProxyEngine] 调试模式 (无 local:xxx, 无 pydivert): {cmd}')
         else:
             cmd = cmd_prefix + [
                 '--listen-host', '127.0.0.1',
                 '--listen-port', str(self._proxy_port),
-                '--mode', f'local:{self._target_process}',
                 '--ssl-insecure',
                 '--set', 'flow_detail=0',
                 '-s', self._addon_script
@@ -237,7 +239,7 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
                 cmd.insert(-2, '--set')
                 cmd.insert(-2, 'allow_hosts=dbankcloud\\.cn|wxagame|weixin\\.qq\\.com')
 
-            print(f'[ProxyEngine] 启动: {sys.executable} -c ... local:{self._target_process}')
+            print(f'[ProxyEngine] 启动 (regular + pydivert redirector): {cmd}')
 
         try:
             env = os.environ.copy()
@@ -305,6 +307,33 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
 
         self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
         self._reader_thread.start()
+
+        # v2.6.9: mitmdump 起来了再启 pydivert local redirector
+        # (顺序很关键: mitmdump 先 listen 8899, redirector 后改 dst, 避免 packet 丢到空口)
+        _use_debug_mode = os.environ.get('DICE_DEBUG_PROXY', '0') == '1'
+        if not _use_debug_mode:
+            try:
+                from proxy.local_redirector import LocalRedirector
+                if self._redirector is None:
+                    self._redirector = LocalRedirector(
+                        target_process=self._target_process,
+                        proxy_port=self._proxy_port,
+                    )
+                if not self._redirector.start():
+                    self._error = f'pydivert redirector 启动失败: {self._redirector._error}'
+                    with open(debug_log, 'a', encoding='utf-8') as f:
+                        f.write(f'  REDIRECTOR FAIL: {self._error}\n')
+                    return False
+                with open(debug_log, 'a', encoding='utf-8') as f:
+                    f.write(f'  redirector started: target={self._target_process} proxy_port={self._proxy_port}\n')
+            except Exception as _re:
+                self._error = f'pydivert redirector 启动异常: {_re}'
+                with open(debug_log, 'a', encoding='utf-8') as f:
+                    f.write(f'  REDIRECTOR EXCEPTION: {self._error}\n')
+                # v2.6.9: redirector 启不动, mitmdump 也不能留 (没人重定向流量)
+                # 直接走 stop() 拆 mitmdump
+                self.stop()
+                return False
 
         for _ in range(80):
             time.sleep(0.1)
@@ -421,6 +450,15 @@ OS杀进程时强制释放WinDivert句柄，不存在泄漏问题。
 
     def stop(self):
         """停止引擎：直接kill子进程，OS回收WinDivert句柄"""
+        # v2.6.9: 先停 pydivert redirector (mitmdump 还 listen 着的, redirector 停
+        # 后就再也没有新流量被改 dst 了), 再 taskkill mitmdump
+        if self._redirector is not None:
+            try:
+                self._redirector.stop()
+            except Exception:
+                pass
+            self._redirector = None
+
         if self._process and self._process.poll() is None:
             try:
                 if sys.platform == 'win32':
