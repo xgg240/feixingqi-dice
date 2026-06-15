@@ -10,6 +10,7 @@ pydivert==2.1.0           # WinDivert Python wrapper (抓包/重定向, 跟 Rust
 pycryptodomex==3.19.0     # 提速某些加密运算
 certifi==2023.7.22        # CA bundle
 requests>=2.28.0          # HTTP 客户端 (mitmproxy 8 要 >=2.9.1)
+setuptools<81             # v2.6.4: mitmproxy 8 contrib 用 pkg_resources, setuptools 81+ 默认不带
 
 # emu_cert.py 用的 cryptography — 别锁, 让 mitmproxy 8 拉它要的 36.x 系列
 # (之前锁 41/42 全跟 mitmproxy 8 冲突, 锁 <37 才安全)
